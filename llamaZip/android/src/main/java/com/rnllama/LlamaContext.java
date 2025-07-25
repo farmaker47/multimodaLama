@@ -24,17 +24,17 @@ public class LlamaContext {
   private static String loadedLibrary = "";
 
   private static class NativeLogCallback {
-    DeviceEventManagerModule.RCTDeviceEventEmitter eventEmitter;
+    // DeviceEventManagerModule.RCTDeviceEventEmitter eventEmitter;
 
     public NativeLogCallback(ReactApplicationContext reactContext) {
-      this.eventEmitter = reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class);
+      // this.eventEmitter = reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class);
     }
 
     void emitNativeLog(String level, String text) {
       WritableMap event = Arguments.createMap();
       event.putString("level", level);
       event.putString("text", text);
-      eventEmitter.emit("@RNLlama_onNativeLog", event);
+      // eventEmitter.emit("@RNLlama_onNativeLog", event);
     }
   }
 
@@ -54,7 +54,7 @@ public class LlamaContext {
   private long context;
   private WritableMap modelDetails;
   private int jobId = -1;
-  private DeviceEventManagerModule.RCTDeviceEventEmitter eventEmitter;
+  // private DeviceEventManagerModule.RCTDeviceEventEmitter eventEmitter;
 
   public LlamaContext(int id, ReactApplicationContext reactContext, ReadableMap params) {
     if (LlamaContext.isArchNotSupported()) {
@@ -63,7 +63,7 @@ public class LlamaContext {
     if (!params.hasKey("model")) {
       throw new IllegalArgumentException("Missing required parameter: model");
     }
-    eventEmitter = reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class);
+    // eventEmitter = reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class);
     this.id = id;
     this.context = initContext(
       // String model,
@@ -162,7 +162,7 @@ public class LlamaContext {
     WritableMap event = Arguments.createMap();
     event.putInt("contextId", LlamaContext.this.id);
     event.putInt("progress", progress);
-    eventEmitter.emit("@RNLlama_onInitContextProgress", event);
+    // eventEmitter.emit("@RNLlama_onInitContextProgress", event);
   }
 
   private static class LoadProgressCallback {
@@ -181,7 +181,7 @@ public class LlamaContext {
     WritableMap event = Arguments.createMap();
     event.putInt("contextId", LlamaContext.this.id);
     event.putMap("tokenResult", tokenResult);
-    eventEmitter.emit("@RNLlama_onToken", event);
+    // eventEmitter.emit("@RNLlama_onToken", event);
   }
 
   private static class PartialCompletionCallback {
