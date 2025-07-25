@@ -3,6 +3,7 @@ package com.example.multimodalama
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +34,8 @@ import com.facebook.react.bridge.WritableMap
 import com.google.gson.Gson
 import com.rnllama.RNLlama
 import kotlinx.coroutines.launch
+import java.io.File
+import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
@@ -497,10 +500,12 @@ class MainActivity : ComponentActivity() {
 
                 runOnUiThread { llamaStatus = "Generating description..." }
 
-                runVisionCompletion(
-                    formattedPrompt,
-                    "/data/local/tmp/bike_896.png"
-                )
+                encodeFileToBase64DataUri("/data/local/tmp/bike_896.png")?.let {
+                    runVisionCompletion(
+                        formattedPrompt,
+                        it//    OR just     "/data/local/tmp/bike_896.png"
+                    )
+                }
             }
 
             override fun reject(code: String?, message: String?) {
@@ -628,6 +633,36 @@ class MainActivity : ComponentActivity() {
         }
 
         rnLlama.completion(1.0, completionParams, completionPromise)
+    }
+
+    private fun encodeFileToBase64DataUri(filePath: String): String? {
+        return try {
+            val file = File(filePath)
+
+            // Add a check to ensure the file exists and is readable
+            if (!file.exists() || !file.canRead()) {
+                Log.e("Base64", "File does not exist or cannot be read: $filePath")
+                llamaStatus = "Error: Could not read image from path."
+                return null
+            }
+
+            // Use the file path to read bytes directly
+            val bytes = file.readBytes()
+            val base64String = Base64.encodeToString(bytes, Base64.NO_WRAP)
+
+            // This logic works the same, using the file path to get the extension
+            val mimeType = when (filePath.substringAfterLast('.').lowercase()) {
+                "jpg", "jpeg" -> "image/jpeg"
+                "png" -> "image/png"
+                else -> "application/octet-stream" // fallback
+            }
+
+            "data:$mimeType;base64,$base64String"
+        } catch (e: Exception) { // Catch broader exceptions like SecurityException
+            Log.e("Base64", "Error encoding file to base64 from path: $filePath", e)
+            llamaStatus = "Error: Could not encode image."
+            null
+        }
     }
 }
 
