@@ -41,6 +41,8 @@ android {
 
 dependencies {
 
+    implementation("com.facebook.react:react-android:0.72.3")
+
     implementation(project(":llama.rn"))
 
     implementation(libs.androidx.core.ktx)
