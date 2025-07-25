@@ -41,6 +41,9 @@ android {
 
 dependencies {
 
+    implementation("com.google.code.gson:gson:2.13.1")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+
     implementation("com.facebook.react:react-android:0.72.3")
 
     implementation(project(":llama.rn"))
