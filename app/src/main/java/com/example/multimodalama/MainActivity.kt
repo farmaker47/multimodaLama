@@ -8,7 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -23,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -92,6 +90,7 @@ class MainActivity : ComponentActivity() {
             ) == PackageManager.PERMISSION_GRANTED -> {
                 initializeLlamaContext()
             }
+
             else -> {
                 requestPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
@@ -99,25 +98,16 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun initializeLlamaContext() {
-        // 3. Define the path to your model file
-//        val modelName = "phi-2.Q4_K_M.gguf" // Change this to your model's name
-//        val modelFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), modelName)
-//
-//        if (!modelFile.exists()) {
-//            Log.e("Llama init", "Model file does not exist at: ${modelFile.absolutePath}")
-//            llamaStatus = "Error: Model file not found!"
-//            return
-//        }
-
-        // 4. Create the parameters map (like a Bundle for React Native)
-
         // Multimodals:
         // https://huggingface.co/collections/ggml-org/multimodal-ggufs-68244e01ff1f39e5bebeeedc
         // https://github.com/ggml-org/llama.cpp/tree/master/tools/mtmd#how-to-obtain-mmproj
         // Important: Download the file.gguf AND the mmproj.gguf
 
         val params: WritableMap = Arguments.createMap().apply {
-            putString("model", "/data/local/tmp/gemma_greek_2b_it_1000_steps_0_22-q8_0.gguf")// /data/local/tmp/DeepSeek-R1-ReDistill-Qwen-1.5B-v1.0-Q8_0.gguf
+            putString(
+                "model",
+                "/data/local/tmp/gemma_greek_2b_it_1000_steps_0_22-q8_0.gguf"
+            )// /data/local/tmp/DeepSeek-R1-ReDistill-Qwen-1.5B-v1.0-Q8_0.gguf
             // /data/local/tmp/gemma_greek_2b_it_1000_steps_0_22-q8_0.gguf
             putInt("n_ctx", 2048) // Context size
             putInt("n_gpu_layers", 0) // GPU layers (0 for CPU on Android for now)
@@ -139,11 +129,9 @@ class MainActivity : ComponentActivity() {
             }
 
             override fun reject(code: String?, message: String?) {
-                TODO("Not yet implemented")
             }
 
             override fun reject(code: String?, throwable: Throwable?) {
-                TODO("Not yet implemented")
             }
 
             override fun reject(code: String?, message: String?, e: Throwable?) {
@@ -180,8 +168,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 6. Call initContext. The RNLlama class runs this on a background thread.
-        // We use a unique ID (e.g., 1.0) for this context.
         Log.d("Llama init", "Starting llama context initialization...")
         llamaStatus = "Loading model: deepseek..."
         rnLlama.initContext(1.0, params, promise)
@@ -193,8 +179,6 @@ class MainActivity : ComponentActivity() {
         isCompleting = true
         completionResult = ""
         llamaStatus = "Formatting prompt..."
-
-        // --- Step 1: Format the Chat Prompt ---
 
         // Create the message structure as a list of maps
         val messages = listOf(
@@ -214,10 +198,9 @@ class MainActivity : ComponentActivity() {
 
         val formatPromise = object : Promise {
             override fun resolve(value: Any?) {
-                // 1. Cast the result to WritableMap, not String
+
                 val formatResult = value as WritableMap
 
-                // 2. Extract the "prompt" string from the map
                 val formattedPrompt = formatResult.getString("prompt") ?: ""
 
                 if (formattedPrompt.isEmpty()) {
@@ -233,7 +216,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread {
                     llamaStatus = "Generating response..."
                 }
-                // Now run completion with the extracted prompt
+
                 runCompletion(formattedPrompt)
             }
 
@@ -302,7 +285,12 @@ class MainActivity : ComponentActivity() {
                 Log.d("Llama Chat", "Completion finished.")
                 Log.d("Llama Chat", "Result text: $resultText")
                 if (timings != null) {
-                    Log.d("Llama Chat", "Timings: Predicted tokens: ${timings.getInt("predicted_n")} in ${timings.getInt("predicted_ms")} ms")
+                    Log.d(
+                        "Llama Chat",
+                        "Timings: Predicted tokens: ${timings.getInt("predicted_n")} in ${
+                            timings.getInt("predicted_ms")
+                        } ms"
+                    )
                 }
 
                 runOnUiThread {
@@ -357,23 +345,14 @@ class MainActivity : ComponentActivity() {
         rnLlama.completion(1.0, completionParams, completionPromise)
     }
 
-
-
     // ################################################################
+    // Multimodal
     private fun initializeVisionLlamaContext() {
-        // --- MODIFIED: Use multimodal model files ---
-//        val modelName = "llava-v1.5-7b-q4_k_m.gguf"
-//        val modelFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), modelName)
-//
-//        if (!modelFile.exists()) {
-//            llamaStatus = "Error: Model file not found at ${modelFile.absolutePath}"
-//            return
-//        }
-
         // --- MODIFIED: Add ctx_shift: false for multimodal ---
         val params = Arguments.createMap().apply {
             putString("model", "/data/local/tmp/SmolVLM2-500M-Video-Instruct-Q8_0.gguf")
             putInt("n_ctx", 4096)
+            // putInt("n_gpu_layers", 99)
             putBoolean("ctx_shift", false) // Crucial for multimodal models
         }
 
@@ -383,7 +362,7 @@ class MainActivity : ComponentActivity() {
                 runOnUiThread {
                     llamaStatus = "Main context loaded! Initializing multimodal projector..."
                     isLlamaReady = true
-                    // --- NEW: Chain the multimodal initialization ---
+
                     initializeMultimodal()
                 }
             }
@@ -431,15 +410,7 @@ class MainActivity : ComponentActivity() {
         rnLlama.initContext(1.0, params, promise)
     }
 
-    // --- NEW: Function to initialize the multimodal projector ---
     private fun initializeMultimodal() {
-//        val mmprojName = "mmproj-model-f16.gguf"
-//        val mmprojFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), mmprojName)
-//
-//        if (!mmprojFile.exists()) {
-//            llamaStatus = "Error: MMPROJ file not found at ${mmprojFile.absolutePath}"
-//            return
-//        }
 
         val params = Arguments.createMap().apply {
             putString("path", "/data/local/tmp/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf")
@@ -467,7 +438,9 @@ class MainActivity : ComponentActivity() {
 
             override fun reject(code: String?, message: String?, e: Throwable?) {
                 Log.e("Llama init", "Failed to init multimodal: $message", e)
-                runOnUiThread { llamaStatus = "Error: Failed to init multimodal projector.\n$message" }
+                runOnUiThread {
+                    llamaStatus = "Error: Failed to init multimodal projector.\n$message"
+                }
             }
 
             override fun reject(throwable: Throwable?) {
@@ -507,10 +480,6 @@ class MainActivity : ComponentActivity() {
         completionResult = ""
         llamaStatus = "Formatting vision prompt..."
 
-        // --- FIX IS HERE: Part 1 ---
-
-        // The messages JSON now uses the <__media__> placeholder.
-        // The actual image path is passed later in runCompletion.
         val messages = listOf(
             mapOf(
                 "role" to "user",
@@ -526,12 +495,12 @@ class MainActivity : ComponentActivity() {
                 val formattedPrompt = value as String
                 Log.d("Llama Vision", "Formatted Prompt: $formattedPrompt")
 
-                // We now pass the image file path to the completion function
-                //val imageName = "cat.jpg"
-                //val imageFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), imageName)
-
                 runOnUiThread { llamaStatus = "Generating description..." }
-                runVisionCompletion(formattedPrompt, "/data/local/tmp/bike_896.png") // Pass the image file
+
+                runVisionCompletion(
+                    formattedPrompt,
+                    "/data/local/tmp/bike_896.png"
+                )
             }
 
             override fun reject(code: String?, message: String?) {
@@ -578,7 +547,7 @@ class MainActivity : ComponentActivity() {
 
 
     private fun runVisionCompletion(prompt: String, imageFile: String) {
-        val stopWords = Arguments.fromList(listOf("</s>", "\n", "User:"))
+        val stopWords = Arguments.fromList(listOf("</s>", "\n", "User:", "<end_of_utterance>"))
 
         val completionParams = Arguments.createMap().apply {
             putString("prompt", prompt)
@@ -601,7 +570,12 @@ class MainActivity : ComponentActivity() {
                 Log.d("Llama Chat", "Completion finished.")
                 Log.d("Llama Chat", "Result text: $resultText")
                 if (timings != null) {
-                    Log.d("Llama Chat", "Timings: Predicted tokens: ${timings.getInt("predicted_n")} in ${timings.getInt("predicted_ms")} ms")
+                    Log.d(
+                        "Llama Chat",
+                        "Timings: Predicted tokens: ${timings.getInt("predicted_n")} in ${
+                            timings.getInt("predicted_ms")
+                        } ms"
+                    )
                 }
 
                 Log.d("Llama Chat", "Completion finished.")
@@ -657,7 +631,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- MODIFIED: Update the UI Composable ---
 @Composable
 fun LlamaDemoScreen(
     status: String,
@@ -669,7 +642,9 @@ fun LlamaDemoScreen(
     onStartVisionCompletion: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -687,7 +662,7 @@ fun LlamaDemoScreen(
 
         Button(
             onClick = onStartVisionCompletion,
-            enabled = isMultimodalReady && !isCompleting // Enabled only when projector is also loaded
+            enabled = isMultimodalReady && !isCompleting
         ) {
             Text(text = "Start Vision Completion")
         }
@@ -701,21 +676,5 @@ fun LlamaDemoScreen(
         if (result.isNotEmpty()) {
             Text(modifier = Modifier.padding(top = 16.dp), text = "Result:\n$result")
         }
-    }
-}
-
-@Composable
-fun Greeting(name: String, modifier: Modifier = Modifier) {
-    Text(
-        text = "Hello $name!",
-        modifier = modifier
-    )
-}
-
-@Preview(showBackground = true)
-@Composable
-fun GreetingPreview() {
-    MultimodaLamaTheme {
-        Greeting("Android")
     }
 }
