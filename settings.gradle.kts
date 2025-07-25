@@ -21,4 +21,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "multimodaLama"
 include(":app")
- 
+include(":llama.rn")
+project(":llama.rn").projectDir = file("llama.rn/android")
