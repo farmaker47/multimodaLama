@@ -19,6 +19,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ import com.facebook.react.bridge.WritableMap
 import com.google.gson.Gson
 import com.rnllama.RNLlama
 import java.io.File
+import kotlin.math.roundToInt
 
 class MainActivity : ComponentActivity() {
 
@@ -41,7 +44,8 @@ class MainActivity : ComponentActivity() {
     private var isCompleting by mutableStateOf(false)
     private var llamaStatus by mutableStateOf("Initializing...")
     private var completionResult by mutableStateOf("")
-    private var isMultimodalReady by mutableStateOf(false) // New state for multimodal
+    private var isMultimodalReady by mutableStateOf(false)
+    private var tokensPerSecond by mutableIntStateOf(0)
 
     // 1. Set up the permission launcher
     private val requestPermissionLauncher =
@@ -70,12 +74,19 @@ class MainActivity : ComponentActivity() {
             MultimodaLamaTheme {
                 LlamaDemoScreen(
                     status = llamaStatus,
+                    tokensPerSecond = tokensPerSecond,
                     result = completionResult,
                     isReady = isLlamaReady,
                     isMultimodalReady = isMultimodalReady,
                     isCompleting = isCompleting,
-                    onStartChatCompletion = { isStreaming -> startAnyCompletion(isStreaming) },
-                    onStartVisionCompletion = { startVisionCompletion() }
+                    onStartChatCompletion = { isStreaming ->
+                        startAnyCompletion(isStreaming)
+                        tokensPerSecond = 0
+                    },
+                    onStartVisionCompletion = {
+                        startVisionCompletion()
+                        tokensPerSecond = 0
+                    }
                 )
             }
         }
@@ -256,6 +267,8 @@ class MainActivity : ComponentActivity() {
                 val result = value as WritableMap
                 val resultText = result.getString("text") ?: "No text in result"
                 val timings = result.getMap("timings")
+                val tps = timings?.getDouble("predicted_per_second") ?: 0.0
+                tokensPerSecond = tps.roundToInt()
 
                 Log.d("Llama Chat", "Completion finished.")
                 Log.d("Llama Chat", "Result text: $resultText")
@@ -343,6 +356,10 @@ class MainActivity : ComponentActivity() {
                 // This is called when the entire generation is complete
                 val result = value as WritableMap
                 Log.d("Llama Stream", "Stream finished. Final result map: $result")
+                val timings = result.getMap("timings")
+                val tps = timings?.getDouble("predicted_per_second") ?: 0.0
+                tokensPerSecond = tps.roundToInt()
+
                 runOnUiThread {
                     llamaStatus = "Completed!"
                     isCompleting = false
@@ -627,6 +644,9 @@ class MainActivity : ComponentActivity() {
                 val resultText = result.getString("text") ?: "No text in result"
                 val timings = result.getMap("timings")
 
+                val tps = timings?.getDouble("predicted_per_second") ?: 0.0
+                tokensPerSecond = tps.roundToInt()
+
                 Log.d("Llama Chat", "Completion finished.")
                 Log.d("Llama Chat", "Result text: $resultText")
                 if (timings != null) {
@@ -724,6 +744,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun LlamaDemoScreen(
     status: String,
+    tokensPerSecond: Int,
     result: String,
     isReady: Boolean,
     isMultimodalReady: Boolean,
@@ -738,8 +759,6 @@ fun LlamaDemoScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text(text = status)
-        Spacer(modifier = Modifier.height(24.dp))
 
         Button(
             onClick = { onStartChatCompletion(false) },
@@ -765,8 +784,11 @@ fun LlamaDemoScreen(
         ) {
             Text(text = "Start Streaming Chat")
         }
-
         Spacer(modifier = Modifier.height(24.dp))
+        Text(text = status)
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Text(text = "T/s = $tokensPerSecond")
 
         if (isCompleting) {
             CircularProgressIndicator()
