@@ -6,17 +6,16 @@ import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.ReactApplicationContext;
-import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import android.util.Log;
 import android.os.Build;
-import android.content.res.AssetManager;
 
 import java.lang.StringBuilder;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.File;
 import java.io.IOException;
+import java.util.function.Consumer;
 
 public class LlamaContext {
   public static final String NAME = "RNLlamaContext";
@@ -184,18 +183,21 @@ public class LlamaContext {
     // eventEmitter.emit("@RNLlama_onToken", event);
   }
 
+  // The inner callback class that JNI will call
   private static class PartialCompletionCallback {
-    LlamaContext context;
-    boolean emitNeeded;
+    Consumer<WritableMap> tokenConsumer;
 
-    public PartialCompletionCallback(LlamaContext context, boolean emitNeeded) {
-      this.context = context;
-      this.emitNeeded = emitNeeded;
+    public PartialCompletionCallback(Consumer<WritableMap> tokenConsumer) {
+      this.tokenConsumer = tokenConsumer;
     }
 
+    // This method is called from C++ for every generated token.
+    // It's the entry point for streaming.
     void onPartialCompletion(WritableMap tokenResult) {
-      if (!emitNeeded) return;
-      context.emitPartialCompletion(tokenResult);
+      // Log.d("Llama Stream", "Streaming token:" + tokenResult);
+      if (tokenConsumer != null) {
+        tokenConsumer.accept(tokenResult);
+      }
     }
   }
 
@@ -221,7 +223,7 @@ public class LlamaContext {
     return saveSession(this.context, path, size);
   }
 
-  public WritableMap completion(ReadableMap params) {
+  public WritableMap completion(ReadableMap params, Consumer<WritableMap> tokenConsumer) {
     if (!params.hasKey("prompt")) {
       throw new IllegalArgumentException("Missing required parameter: prompt");
     }
@@ -247,6 +249,8 @@ public class LlamaContext {
         guide_tokens[i] = (int) guide_tokens_array.getDouble(i);
       }
     }
+
+    PartialCompletionCallback callback = new PartialCompletionCallback(tokenConsumer);
 
     WritableMap result = doCompletion(
       this.context,
@@ -327,15 +331,16 @@ public class LlamaContext {
       // String[] media_paths
       params.hasKey("media_paths") ? params.getArray("media_paths").toArrayList().toArray(new String[0]) : new String[0],
       // PartialCompletionCallback partial_completion_callback
-      new PartialCompletionCallback(
-        this,
-        params.hasKey("emit_partial_completion") ? params.getBoolean("emit_partial_completion") : false
-      )
+      callback
     );
     if (result.hasKey("error")) {
       throw new IllegalStateException(result.getString("error"));
     }
     return result;
+  }
+
+  public WritableMap completion(ReadableMap params) {
+    return this.completion(params, null);
   }
 
   public void stopCompletion() {
@@ -563,6 +568,7 @@ public class LlamaContext {
     String model,
     String[] skip
   );
+
   protected static native long initContext(
     String model_path,
     String chat_template,
@@ -588,13 +594,19 @@ public class LlamaContext {
     boolean ctx_shift,
     LoadProgressCallback load_progress_callback
   );
+
   protected static native boolean initMultimodal(long contextPtr, String mmproj_path, boolean MMPROJ_USE_GPU);
+
   protected static native boolean isMultimodalEnabled(long contextPtr);
+
   protected static native WritableMap getMultimodalSupport(long contextPtr);
+
   protected static native void interruptLoad(long contextPtr);
+
   protected static native WritableMap loadModelDetails(
     long contextPtr
   );
+
   protected static native WritableMap getFormattedChatWithJinja(
     long contextPtr,
     String messages,
@@ -605,20 +617,24 @@ public class LlamaContext {
     String toolChoice,
     boolean enableThinking
   );
+
   protected static native String getFormattedChat(
     long contextPtr,
     String messages,
     String chatTemplate
   );
+
   protected static native WritableMap loadSession(
     long contextPtr,
     String path
   );
+
   protected static native int saveSession(
     long contextPtr,
     String path,
     int size
   );
+
   protected static native WritableMap doCompletion(
     long context_ptr,
     String prompt,
@@ -652,8 +668,8 @@ public class LlamaContext {
     String[] stop,
     boolean ignore_eos,
     double[][] logit_bias,
-    float   dry_multiplier,
-    float   dry_base,
+    float dry_multiplier,
+    float dry_base,
     int dry_allowed_length,
     int dry_penalty_last_n,
     float top_n_sigma,
@@ -661,29 +677,50 @@ public class LlamaContext {
     String[] media_paths,
     PartialCompletionCallback partial_completion_callback
   );
+
   protected static native void stopCompletion(long contextPtr);
+
   protected static native boolean isPredicting(long contextPtr);
+
   protected static native WritableMap tokenize(long contextPtr, String text, String[] media_paths);
+
   protected static native String detokenize(long contextPtr, int[] tokens);
+
   protected static native boolean isEmbeddingEnabled(long contextPtr);
+
   protected static native WritableMap embedding(
     long contextPtr,
     String text,
     int embd_normalize
   );
+
   protected static native WritableArray rerank(long contextPtr, String query, String[] documents, int normalize);
+
   protected static native String bench(long contextPtr, int pp, int tg, int pl, int nr);
+
   protected static native int applyLoraAdapters(long contextPtr, ReadableArray loraAdapters);
+
   protected static native void removeLoraAdapters(long contextPtr);
+
   protected static native WritableArray getLoadedLoraAdapters(long contextPtr);
+
   protected static native void freeContext(long contextPtr);
+
   protected static native void setupLog(NativeLogCallback logCallback);
+
   protected static native void unsetLog();
+
   protected static native void releaseMultimodal(long contextPtr);
+
   protected static native boolean isVocoderEnabled(long contextPtr);
+
   protected static native String getFormattedAudioCompletion(long contextPtr, String speakerJsonStr, String textToSpeak);
+
   protected static native WritableArray getAudioCompletionGuideTokens(long contextPtr, String textToSpeak);
+
   protected static native WritableArray decodeAudioTokens(long contextPtr, int[] tokens);
+
   protected static native boolean initVocoder(long contextPtr, String vocoderModelPath);
+
   protected static native void releaseVocoder(long contextPtr);
 }

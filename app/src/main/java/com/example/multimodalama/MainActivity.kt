@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import androidx.lifecycle.lifecycleScope
 import com.example.multimodalama.ui.theme.MultimodaLamaTheme
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -33,9 +32,7 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.WritableMap
 import com.google.gson.Gson
 import com.rnllama.RNLlama
-import kotlinx.coroutines.launch
 import java.io.File
-import java.io.IOException
 
 class MainActivity : ComponentActivity() {
 
@@ -65,8 +62,7 @@ class MainActivity : ComponentActivity() {
         val reactContext = ReactApplicationContext(applicationContext)
         rnLlama = RNLlama(reactContext)
 
-        // 2. Check for and request permission
-        // checkAndRequestPermission()
+        // Use either vision OR no vision models.
         // initializeLlamaContext()
         initializeVisionLlamaContext()
 
@@ -76,10 +72,10 @@ class MainActivity : ComponentActivity() {
                     status = llamaStatus,
                     result = completionResult,
                     isReady = isLlamaReady,
-                    isMultimodalReady = isMultimodalReady, // Pass new state to UI
+                    isMultimodalReady = isMultimodalReady,
                     isCompleting = isCompleting,
-                    onStartChatCompletion = { startChatCompletion() },
-                    onStartVisionCompletion = { startVisionCompletion() } // New event handler
+                    onStartChatCompletion = { isStreaming -> startAnyCompletion(isStreaming) },
+                    onStartVisionCompletion = { startVisionCompletion() }
                 )
             }
         }
@@ -117,18 +113,12 @@ class MainActivity : ComponentActivity() {
             putBoolean("embedding", false)
         }
 
-        // 5. Create a Promise to handle the async result
         val promise = object : Promise {
 
             override fun resolve(value: Any?) {
                 Log.d("Llama init", "Llama context initialized successfully!")
                 llamaStatus = "Llama context loaded successfully!"
                 isLlamaReady = true
-
-                lifecycleScope.launch {
-                    // delay(1000)
-                    startChatCompletion()
-                }
             }
 
             override fun reject(code: String?, message: String?) {
@@ -172,55 +162,36 @@ class MainActivity : ComponentActivity() {
         }
 
         Log.d("Llama init", "Starting llama context initialization...")
-        llamaStatus = "Loading model: deepseek..."
+        llamaStatus = "Loading model: gemma..."
         rnLlama.initContext(1.0, params, promise)
     }
 
-    private fun startChatCompletion() {
+    // A generic function to start a completion, either streaming or not
+    private fun startAnyCompletion(isStreaming: Boolean) {
         if (!isLlamaReady || isCompleting) return
 
         isCompleting = true
-        completionResult = ""
+        completionResult = "" // Reset result at the start
         llamaStatus = "Formatting prompt..."
 
-        // Create the message structure as a list of maps
         val messages = listOf(
             mapOf("role" to "system", "content" to "You are a helpful assistant."),
-            mapOf("role" to "user", "content" to "Hello! Can you tell me a short story?")
+            mapOf("role" to "user", "content" to "Tell me a story about a brave robot.")
         )
-
-        // The library expects this as a JSON string
         val messagesJson = Gson().toJson(messages)
 
-        // Create an empty params map for getFormattedChat
-        val formatParams = Arguments.createMap().apply {
-            // Add these two lines to use the advanced formatter and disable thinking
-            putBoolean("jinja", true)
-            putBoolean("enable_thinking", false)
-        }
+        val formatParams = Arguments.createMap()
 
         val formatPromise = object : Promise {
             override fun resolve(value: Any?) {
+                val formattedPrompt = value as String
+                runOnUiThread { llamaStatus = "Generating response..." }
 
-                val formatResult = value as WritableMap
-
-                val formattedPrompt = formatResult.getString("prompt") ?: ""
-
-                if (formattedPrompt.isEmpty()) {
-                    Log.e("Llama Chat", "Formatted prompt was empty!")
-                    runOnUiThread {
-                        llamaStatus = "Error: Failed to generate a valid prompt."
-                        isCompleting = false
-                    }
-                    return
+                if (isStreaming) {
+                    runCompletionStream(formattedPrompt)
+                } else {
+                    runCompletion(formattedPrompt) // The original non-streaming call
                 }
-
-                Log.d("Llama Chat", "Formatted Prompt: $formattedPrompt")
-                runOnUiThread {
-                    llamaStatus = "Generating response..."
-                }
-
-                runCompletion(formattedPrompt)
             }
 
             override fun reject(code: String?, message: String?) {
@@ -277,6 +248,7 @@ class MainActivity : ComponentActivity() {
             putInt("n_predict", 100) // Max tokens to generate
             putArray("stop", stopWords)
             putDouble("temperature", 0.7)
+            putBoolean("emit_partial_completion", true)
         }
 
         val completionPromise = object : Promise {
@@ -298,7 +270,7 @@ class MainActivity : ComponentActivity() {
 
                 runOnUiThread {
                     completionResult = resultText.trim()
-                    llamaStatus = "Completed!\n $resultText"
+                    llamaStatus = "Completed!"
                     isCompleting = false
                 }
             }
@@ -346,6 +318,81 @@ class MainActivity : ComponentActivity() {
         }
 
         rnLlama.completion(1.0, completionParams, completionPromise)
+    }
+
+    private fun runCompletionStream(prompt: String) {
+        val stopWords = Arguments.fromList(listOf("</s>", "\n"))
+        val completionParams = Arguments.createMap().apply {
+            putString("prompt", prompt)
+            putInt("n_predict", 100)
+            putArray("stop", stopWords)
+            putDouble("temperature", 0.7)
+            putBoolean("emit_partial_completion", true)
+        }
+
+        val streamCallback = object : RNLlama.StreamCallback {
+            override fun onToken(token: String) {
+                // Append the new token to our result state
+                completionResult += token
+                // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
+            }
+        }
+
+        val completionPromise = object : Promise {
+            override fun resolve(value: Any?) {
+                // This is called when the entire generation is complete
+                val result = value as WritableMap
+                Log.d("Llama Stream", "Stream finished. Final result map: $result")
+                runOnUiThread {
+                    llamaStatus = "Completed!"
+                    isCompleting = false
+                }
+            }
+
+            override fun reject(code: String?, message: String?) {
+
+            }
+
+            override fun reject(code: String?, throwable: Throwable?) {
+            }
+
+            override fun reject(code: String?, message: String?, e: Throwable?) {
+                Log.e("Llama Stream", "Completion failed: $message", e)
+                runOnUiThread {
+                    llamaStatus = "Error during completion: $message"
+                    isCompleting = false
+                }
+            }
+
+            override fun reject(throwable: Throwable?) {
+            }
+
+            override fun reject(throwable: Throwable?, userInfo: WritableMap?) {
+            }
+
+            override fun reject(code: String?, userInfo: WritableMap) {
+            }
+
+            override fun reject(code: String?, throwable: Throwable?, userInfo: WritableMap?) {
+            }
+
+            override fun reject(code: String?, message: String?, userInfo: WritableMap) {
+            }
+
+            override fun reject(
+                code: String?,
+                message: String?,
+                throwable: Throwable?,
+                userInfo: WritableMap?
+            ) {
+            }
+
+            override fun reject(message: String?) {
+            }
+        }
+
+        // 3. Call the new streaming method
+        rnLlama.completionStream(1.0, completionParams, streamCallback, completionPromise)
     }
 
     // ################################################################
@@ -556,7 +603,7 @@ class MainActivity : ComponentActivity() {
 
         val completionParams = Arguments.createMap().apply {
             putString("prompt", prompt)
-            putInt("n_predict", 200)
+            putInt("n_predict", 100)
             putArray("stop", stopWords)
             putDouble("temperature", 0.1)
 
@@ -564,6 +611,14 @@ class MainActivity : ComponentActivity() {
             val mediaPaths = Arguments.createArray()
             mediaPaths.pushString(imageFile)
             putArray("media_paths", mediaPaths)
+        }
+
+        val streamCallback = object : RNLlama.StreamCallback {
+            override fun onToken(token: String) {
+                // Append the new token to our result state
+                completionResult += token
+                // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
+            }
         }
 
         val completionPromise = object : Promise {
@@ -632,7 +687,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        rnLlama.completion(1.0, completionParams, completionPromise)
+        rnLlama.completionStream(1.0, completionParams, streamCallback, completionPromise)
     }
 
     private fun encodeFileToBase64DataUri(filePath: String): String? {
@@ -673,7 +728,7 @@ fun LlamaDemoScreen(
     isReady: Boolean,
     isMultimodalReady: Boolean,
     isCompleting: Boolean,
-    onStartChatCompletion: () -> Unit,
+    onStartChatCompletion: (Boolean) -> Unit,
     onStartVisionCompletion: () -> Unit
 ) {
     Column(
@@ -687,7 +742,7 @@ fun LlamaDemoScreen(
         Spacer(modifier = Modifier.height(24.dp))
 
         Button(
-            onClick = onStartChatCompletion,
+            onClick = { onStartChatCompletion(false) },
             enabled = isReady && !isCompleting
         ) {
             Text(text = "Start Chat Completion")
@@ -700,6 +755,15 @@ fun LlamaDemoScreen(
             enabled = isMultimodalReady && !isCompleting
         ) {
             Text(text = "Start Vision Completion")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        Button(
+            onClick = { onStartChatCompletion(true) }, // Pass true for streaming
+            enabled = isReady && !isCompleting
+        ) {
+            Text(text = "Start Streaming Chat")
         }
 
         Spacer(modifier = Modifier.height(24.dp))

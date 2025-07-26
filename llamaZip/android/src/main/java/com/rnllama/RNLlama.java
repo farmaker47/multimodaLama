@@ -1,9 +1,8 @@
 package com.rnllama;
 
-import androidx.annotation.NonNull;
-import android.util.Log;
-import android.os.Build;
 import android.os.Handler;
+import android.os.Looper;
+import android.util.Log;
 import android.os.AsyncTask;
 
 import com.facebook.react.bridge.Promise;
@@ -17,10 +16,9 @@ import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.Arguments;
 
 import java.util.HashMap;
-import java.util.Random;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.PushbackInputStream;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 public class RNLlama implements LifecycleEventListener {
   public static final String NAME = "RNLlama";
@@ -35,6 +33,14 @@ public class RNLlama implements LifecycleEventListener {
   private HashMap<AsyncTask, String> tasks = new HashMap<>();
 
   private HashMap<Integer, LlamaContext> contexts = new HashMap<>();
+
+  public interface StreamCallback {
+    void onToken(String token);
+  }
+
+  private final ExecutorService executor = Executors.newSingleThreadExecutor();
+  // This handler allows us to post results back to the main (UI) thread.
+  private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
   public void toggleNativeLog(boolean enabled, Promise promise) {
     new AsyncTask<Void, Void, Boolean>() {
@@ -282,6 +288,42 @@ public class RNLlama implements LifecycleEventListener {
       }
     }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     tasks.put(task, "completion-" + contextId);
+  }
+
+  private LlamaContext getContextOrThrow(double id) throws Exception {
+    // Handle potential ClassCastException from double to int for map key
+    Integer contextId = (int) id;
+    LlamaContext context = contexts.get(contextId);
+    if (context == null) {
+      throw new Exception("Context with ID " + contextId + " not found");
+    }
+    return context;
+  }
+
+  public void completionStream(double id, final ReadableMap params, final StreamCallback streamCallback, final Promise promise) {
+    executor.execute(() -> {
+      try {
+        LlamaContext context = getContextOrThrow(id);
+        if (context.isPredicting()) {
+          throw new Exception("Context is busy");
+        }
+
+        // This Consumer is the bridge between the native callback and UI callback.
+        final Consumer<WritableMap> tokenConsumer = tokenResult -> {
+          if (tokenResult != null && tokenResult.hasKey("token")) {
+            String token = tokenResult.getString("token");
+            mainHandler.post(() -> streamCallback.onToken(token));
+          }
+        };
+
+        WritableMap finalResult = context.completion(params, tokenConsumer);
+
+        mainHandler.post(() -> promise.resolve(finalResult));
+
+      } catch (Exception e) {
+        mainHandler.post(() -> promise.reject(e));
+      }
+    });
   }
 
   public void stopCompletion(double id, final Promise promise) {
