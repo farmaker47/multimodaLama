@@ -548,21 +548,22 @@ class MainActivity : ComponentActivity() {
 //        val messages = listOf(
 //            mapOf(
 //                "role" to "user",
-//                "content" to "Describe the audio.\n<__media__>"
+//                "content" to "What do you see in this image? Describe it in detail.\n<__media__>"
 //            )
+//
 //        )
 //        val messages2 = listOf(
 //            mapOf("role" to "system", "content" to "You are a helpful assistant."),
 //            mapOf("role" to "user", "content" to "What do you see in this image? Describe it in detail.")
 //        )
 
-        val messages = listOf(
+        val messages2 = listOf(
             mapOf(
                 "role" to "user",
                 "content" to listOf(
                     mapOf(
                         "type" to "text",
-                        "text" to "What do you see in this image? Describe it in detail." // Add <__media__> ???
+                        "text" to "What do you see in this image? Describe it in detail.\n<__media__>"
                     ),
                     /*mapOf(
                         "type" to "image_url",
@@ -574,7 +575,7 @@ class MainActivity : ComponentActivity() {
                 )
             )
         )
-        val messagesJson = Gson().toJson(messages)
+        val messagesJson = Gson().toJson(messages2)
 
         val formatParams = Arguments.createMap()
 
@@ -585,7 +586,7 @@ class MainActivity : ComponentActivity() {
 
                 runOnUiThread { llamaStatus = "Generating description..." }
 
-                encodeFileToBase64DataUri("/data/local/tmp/bike_896.png")?.let {
+                encodeFileToBase64DataUri("/data/local/tmp/lightning.png")?.let {
                     runVisionCompletion(
                         formattedPrompt,
                         it
@@ -747,28 +748,29 @@ class MainActivity : ComponentActivity() {
         return try {
             val file = File(filePath)
 
-            // Add a check to ensure the file exists and is readable
             if (!file.exists() || !file.canRead()) {
                 Log.e("Base64", "File does not exist or cannot be read: $filePath")
-                llamaStatus = "Error: Could not read image from path."
+                llamaStatus = "Error: Could not read file from path."
                 return null
             }
 
-            // Use the file path to read bytes directly
             val bytes = file.readBytes()
             val base64String = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
-            // This logic works the same, using the file path to get the extension
             val mimeType = when (filePath.substringAfterLast('.').lowercase()) {
                 "jpg", "jpeg" -> "image/jpeg"
                 "png" -> "image/png"
+                "wav" -> "audio/wav"
+                "mp3" -> "audio/mpeg"
+                // "mp4" -> "video/mp4"
+                // "pdf" -> "application/pdf"
                 else -> "application/octet-stream" // fallback
             }
 
             "data:$mimeType;base64,$base64String"
-        } catch (e: Exception) { // Catch broader exceptions like SecurityException
+        } catch (e: Exception) {
             Log.e("Base64", "Error encoding file to base64 from path: $filePath", e)
-            llamaStatus = "Error: Could not encode image."
+            llamaStatus = "Error: Could not encode file."
             null
         }
     }
