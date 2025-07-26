@@ -259,7 +259,7 @@ class MainActivity : ComponentActivity() {
             putInt("n_predict", 100) // Max tokens to generate
             putArray("stop", stopWords)
             putDouble("temperature", 0.7)
-            putBoolean("emit_partial_completion", true)
+            // putBoolean("emit_partial_completion", true)
         }
 
         val completionPromise = object : Promise {
@@ -340,7 +340,7 @@ class MainActivity : ComponentActivity() {
             putInt("n_predict", 100)
             putArray("stop", stopWords)
             putDouble("temperature", 0.7)
-            putBoolean("emit_partial_completion", true)
+            // putBoolean("emit_partial_completion", true)
         }
 
         val streamCallback = object : RNLlama.StreamCallback {
@@ -355,7 +355,7 @@ class MainActivity : ComponentActivity() {
             override fun resolve(value: Any?) {
                 // This is called when the entire generation is complete
                 val result = value as WritableMap
-                Log.d("Llama Stream", "Stream finished. Final result map: $result")
+                // Log.d("Llama Stream", "Stream finished. Final result map: $result")
                 val timings = result.getMap("timings")
                 val tps = timings?.getDouble("predicted_per_second") ?: 0.0
                 tokensPerSecond = tps.roundToInt()
