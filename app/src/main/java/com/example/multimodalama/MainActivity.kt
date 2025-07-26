@@ -567,9 +567,15 @@ class MainActivity : ComponentActivity() {
                 encodeFileToBase64DataUri("/data/local/tmp/bike_896.png")?.let {
                     runVisionCompletion(
                         formattedPrompt,
-                        it//    OR just     "/data/local/tmp/bike_896.png"
+                        it
                     )
                 }
+
+                // OR
+                /*runVisionCompletion(
+                    formattedPrompt,
+                    "/data/local/tmp/bike_896.png"
+                )*/
             }
 
             override fun reject(code: String?, message: String?) {
@@ -708,6 +714,8 @@ class MainActivity : ComponentActivity() {
         }
 
         rnLlama.completionStream(1.0, completionParams, streamCallback, completionPromise)
+        // OR
+        // rnLlama.completion(1.0, completionParams, completionPromise)
     }
 
     private fun encodeFileToBase64DataUri(filePath: String): String? {
