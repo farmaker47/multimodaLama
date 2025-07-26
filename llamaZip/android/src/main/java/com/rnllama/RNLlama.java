@@ -42,31 +42,43 @@ public class RNLlama implements LifecycleEventListener {
   // This handler allows us to post results back to the main (UI) thread.
   private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
+//  public void toggleNativeLog(boolean enabled, Promise promise) {
+//    new AsyncTask<Void, Void, Boolean>() {
+//      private Exception exception;
+//
+//      @Override
+//      protected Boolean doInBackground(Void... voids) {
+//        try {
+//          LlamaContext.toggleNativeLog(reactContext, enabled);
+//          return true;
+//        } catch (Exception e) {
+//          exception = e;
+//        }
+//        return null;
+//      }
+//
+//      @Override
+//      protected void onPostExecute(Boolean result) {
+//        if (exception != null) {
+//          promise.reject(exception);
+//          return;
+//        }
+//        promise.resolve(result);
+//      }
+//    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+//  }
+
   public void toggleNativeLog(boolean enabled, Promise promise) {
-    new AsyncTask<Void, Void, Boolean>() {
-      private Exception exception;
-
-      @Override
-      protected Boolean doInBackground(Void... voids) {
-        try {
-          LlamaContext.toggleNativeLog(reactContext, enabled);
-          return true;
-        } catch (Exception e) {
-          exception = e;
-        }
-        return null;
+    executor.execute(() -> {
+      try {
+        LlamaContext.toggleNativeLog(reactContext, enabled);
+        mainHandler.post(() -> promise.resolve(true));
+      } catch (Exception e) {
+        mainHandler.post(() -> promise.reject(e));
       }
-
-      @Override
-      protected void onPostExecute(Boolean result) {
-        if (exception != null) {
-          promise.reject(exception);
-          return;
-        }
-        promise.resolve(result);
-      }
-    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    });
   }
+
 
   private int llamaContextLimit = -1;
 
@@ -75,33 +87,50 @@ public class RNLlama implements LifecycleEventListener {
     promise.resolve(null);
   }
 
+//  public void modelInfo(final String model, final ReadableArray skip, final Promise promise) {
+//    new AsyncTask<Void, Void, WritableMap>() {
+//      private Exception exception;
+//
+//      @Override
+//      protected WritableMap doInBackground(Void... voids) {
+//        try {
+//          String[] skipArray = new String[skip.size()];
+//          for (int i = 0; i < skip.size(); i++) {
+//            skipArray[i] = skip.getString(i);
+//          }
+//          return LlamaContext.modelInfo(model, skipArray);
+//        } catch (Exception e) {
+//          exception = e;
+//        }
+//        return null;
+//      }
+//
+//      @Override
+//      protected void onPostExecute(WritableMap result) {
+//        if (exception != null) {
+//          promise.reject(exception);
+//          return;
+//        }
+//        promise.resolve(result);
+//      }
+//    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+//  }
+
   public void modelInfo(final String model, final ReadableArray skip, final Promise promise) {
-    new AsyncTask<Void, Void, WritableMap>() {
-      private Exception exception;
-
-      @Override
-      protected WritableMap doInBackground(Void... voids) {
-        try {
-          String[] skipArray = new String[skip.size()];
-          for (int i = 0; i < skip.size(); i++) {
-            skipArray[i] = skip.getString(i);
-          }
-          return LlamaContext.modelInfo(model, skipArray);
-        } catch (Exception e) {
-          exception = e;
+    executor.execute(() -> {
+      try {
+        String[] skipArray = new String[skip.size()];
+        for (int i = 0; i < skip.size(); i++) {
+          skipArray[i] = skip.getString(i);
         }
-        return null;
-      }
 
-      @Override
-      protected void onPostExecute(WritableMap result) {
-        if (exception != null) {
-          promise.reject(exception);
-          return;
-        }
-        promise.resolve(result);
+        WritableMap result = LlamaContext.modelInfo(model, skipArray);
+
+        mainHandler.post(() -> promise.resolve(result));
+      } catch (Exception e) {
+        mainHandler.post(() -> promise.reject(e));
       }
-    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
+    });
   }
 
   public void initContext(double id, final ReadableMap params, final Promise promise) {
@@ -255,39 +284,24 @@ public class RNLlama implements LifecycleEventListener {
   }
 
   public void completion(double id, final ReadableMap params, final Promise promise) {
-    final int contextId = (int) id;
-    AsyncTask task = new AsyncTask<Void, Void, WritableMap>() {
-      private Exception exception;
-
-      @Override
-      protected WritableMap doInBackground(Void... voids) {
-        try {
-          LlamaContext context = contexts.get(contextId);
-          if (context == null) {
-            throw new Exception("Context not found");
-          }
-          if (context.isPredicting()) {
-            throw new Exception("Context is busy");
-          }
-          WritableMap result = context.completion(params);
-          return result;
-        } catch (Exception e) {
-          exception = e;
+    executor.execute(() -> {
+      try {
+        int contextId = (int) id;
+        LlamaContext context = contexts.get(contextId);
+        if (context == null) {
+          throw new Exception("Context not found");
         }
-        return null;
-      }
-
-      @Override
-      protected void onPostExecute(WritableMap result) {
-        if (exception != null) {
-          promise.reject(exception);
-          return;
+        if (context.isPredicting()) {
+          throw new Exception("Context is busy");
         }
-        promise.resolve(result);
-        tasks.remove(this);
+
+        WritableMap result = context.completion(params);
+
+        mainHandler.post(() -> promise.resolve(result));
+      } catch (Exception e) {
+        mainHandler.post(() -> promise.reject(e));
       }
-    }.executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
-    tasks.put(task, "completion-" + contextId);
+    });
   }
 
   private LlamaContext getContextOrThrow(double id) throws Exception {
