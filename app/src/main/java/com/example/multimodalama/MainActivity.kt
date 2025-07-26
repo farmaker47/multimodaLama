@@ -40,6 +40,7 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var rnLlama: RNLlama
     private var isLlamaReady by mutableStateOf(false)
+    private var isAudioReady by mutableStateOf(false)
     private var isCompleting by mutableStateOf(false)
     private var llamaStatus by mutableStateOf("Initializing...")
     private var completionResult by mutableStateOf("")
@@ -67,6 +68,7 @@ class MainActivity : ComponentActivity() {
 
         // Use either vision OR no vision models.
         // initializeLlamaContext()
+        // initializeAudio()
         initializeVisionLlamaContext()
 
         setContent {
@@ -115,7 +117,7 @@ class MainActivity : ComponentActivity() {
         val params: WritableMap = Arguments.createMap().apply {
             putString(
                 "model",
-                "/data/local/tmp/gemma_greek_2b_it_1000_steps_0_22-q8_0.gguf"
+                "/data/local/tmp/Llama-3.2-1B-Instruct-Q8_0.gguf"
             )// /data/local/tmp/DeepSeek-R1-ReDistill-Qwen-1.5B-v1.0-Q8_0.gguf
             // /data/local/tmp/gemma_greek_2b_it_1000_steps_0_22-q8_0.gguf
             putInt("n_ctx", 2048) // Context size
@@ -405,7 +407,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 3. Call the new streaming method
         rnLlama.completionStream(1.0, completionParams, streamCallback, completionPromise)
     }
 
@@ -414,7 +415,7 @@ class MainActivity : ComponentActivity() {
     private fun initializeVisionLlamaContext() {
         // --- MODIFIED: Add ctx_shift: false for multimodal ---
         val params = Arguments.createMap().apply {
-            putString("model", "/data/local/tmp/SmolVLM2-500M-Video-Instruct-Q8_0.gguf")
+            putString("model", "/data/local/tmp/SmolVLM2-500M-Video-Instruct-Q8_0.gguf") // Llama-3.2-1B-Instruct-Q8_0.gguf
             putInt("n_ctx", 4096)
             // putInt("n_gpu_layers", 99)
             putBoolean("ctx_shift", false) // Crucial for multimodal models
@@ -477,7 +478,7 @@ class MainActivity : ComponentActivity() {
     private fun initializeMultimodal() {
 
         val params = Arguments.createMap().apply {
-            putString("path", "/data/local/tmp/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf")
+            putString("path", "/data/local/tmp/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf") // mmproj-ultravox-v0_5-llama-3_2-1b-f16.gguf
         }
 
         val promise = object : Promise {
@@ -544,10 +545,33 @@ class MainActivity : ComponentActivity() {
         completionResult = ""
         llamaStatus = "Formatting vision prompt..."
 
+//        val messages = listOf(
+//            mapOf(
+//                "role" to "user",
+//                "content" to "Describe the audio.\n<__media__>"
+//            )
+//        )
+//        val messages2 = listOf(
+//            mapOf("role" to "system", "content" to "You are a helpful assistant."),
+//            mapOf("role" to "user", "content" to "What do you see in this image? Describe it in detail.")
+//        )
+
         val messages = listOf(
             mapOf(
                 "role" to "user",
-                "content" to "What do you see in this image? Describe it in detail.\n<__media__>"
+                "content" to listOf(
+                    mapOf(
+                        "type" to "text",
+                        "text" to "What do you see in this image? Describe it in detail." // Add <__media__> ???
+                    ),
+                    /*mapOf(
+                        "type" to "image_url",
+                        "image_url" to mapOf(
+                            "url" to "file:///data/local/tmp/bike_896.png"
+                            // Or: "base64" to "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD..."
+                        )
+                    )*/
+                )
             )
         )
         val messagesJson = Gson().toJson(messages)
@@ -615,6 +639,12 @@ class MainActivity : ComponentActivity() {
         }
 
         rnLlama.getFormattedChat(1.0, messagesJson, null, formatParams, formatPromise)
+
+        // Just to get information about the multimodal capabilities
+        // Use with some modifications above
+        // rnLlama.getMultimodalSupport(1.0, formatPromise)
+        // Get some info
+        // rnLlama.modelInfo()
     }
 
 
@@ -742,6 +772,79 @@ class MainActivity : ComponentActivity() {
             null
         }
     }
+
+    // ###########################################
+    // Audio
+//    private fun initializeAudio() {
+////        val whisperModelName = "ggml-tiny.en-q5_1.bin"
+////        val whisperFile = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), whisperModelName)
+////
+////        if (!whisperFile.exists()) {
+////            llamaStatus = "Error: Whisper model file not found at ${whisperFile.absolutePath}"
+////            return
+////        }
+//
+//        val params = Arguments.createMap().apply {
+//            putString("path", "/data/local/tmp/mmproj-SmolVLM2-500M-Video-Instruct-Q8_0.gguf")
+//        }
+//
+//        val promise = object : Promise {
+//            override fun resolve(value: Any?) {
+//                if (value as Boolean) {
+//                    Log.d("Llama init", "Audio transcriber (vocoder) initialized successfully!")
+//                    runOnUiThread {
+//                        llamaStatus = "Model, projector, and transcriber loaded. Ready!"
+//                        isAudioReady = true
+//
+//                        initializeMultimodal()
+//                    }
+//                } else {
+//                    reject(null, "initVocoder returned false.", null)
+//                }
+//            }
+//
+//            override fun reject(code: String?, message: String?) {
+//
+//            }
+//
+//            override fun reject(code: String?, throwable: Throwable?) {
+//            }
+//
+//            override fun reject(code: String?, message: String?, e: Throwable?) {
+//                Log.e("Llama init", "Failed to init vocoder: $message", e)
+//                runOnUiThread { llamaStatus = "Error: Failed to init audio transcriber.\n$message" }
+//            }
+//
+//            override fun reject(throwable: Throwable?) {
+//            }
+//
+//            override fun reject(throwable: Throwable?, userInfo: WritableMap?) {
+//            }
+//
+//            override fun reject(code: String?, userInfo: WritableMap) {
+//            }
+//
+//            override fun reject(code: String?, throwable: Throwable?, userInfo: WritableMap?) {
+//            }
+//
+//            override fun reject(code: String?, message: String?, userInfo: WritableMap) {
+//            }
+//
+//            override fun reject(
+//                code: String?,
+//                message: String?,
+//                throwable: Throwable?,
+//                userInfo: WritableMap?
+//            ) {
+//            }
+//
+//            override fun reject(message: String?) {
+//            }
+//        }
+//
+//        // Note: The library calls this 'initVocoder', but it's used for transcription too.
+//        rnLlama.initVocoder(1.0, "mmproj-ultravox-v0_5-llama-3_2-1b-f16.ggu", promise)
+//    }
 }
 
 @Composable
