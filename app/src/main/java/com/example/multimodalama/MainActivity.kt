@@ -19,7 +19,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -343,12 +342,10 @@ class MainActivity : ComponentActivity() {
             // putBoolean("emit_partial_completion", true)
         }
 
-        val streamCallback = object : RNLlama.StreamCallback {
-            override fun onToken(token: String) {
-                // Append the new token to our result state
-                completionResult += token
-                // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
-            }
+        val streamCallback = RNLlama.StreamCallback { token ->
+            // Append the new token to our result state
+            completionResult += token
+            // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
         }
 
         val completionPromise = object : Promise {
@@ -636,12 +633,10 @@ class MainActivity : ComponentActivity() {
             putArray("media_paths", mediaPaths)
         }
 
-        val streamCallback = object : RNLlama.StreamCallback {
-            override fun onToken(token: String) {
-                // Append the new token to our result state
-                completionResult += token
-                // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
-            }
+        val streamCallback = RNLlama.StreamCallback { token ->
+            // Append the new token to our result state
+            completionResult += token
+            // Log.d("Llama Stream", "Stream finished. Final result map: $completionResult")
         }
 
         val completionPromise = object : Promise {
